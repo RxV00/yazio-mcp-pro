@@ -834,6 +834,22 @@ Example:
       res.send('YAZIO MCP Server is running.');
     });
 
+    app.get('/debug/config', (_req, res) => {
+      res.json({
+        version,
+        hasYazioUsername: !!process.env.YAZIO_USERNAME,
+        hasYazioPassword: !!process.env.YAZIO_PASSWORD,
+        hasAuthToken: !!process.env.MCP_AUTH_TOKEN,
+        publicUrl: process.env.MCP_PUBLIC_URL ?? null,
+        hasOauthClientId: !!process.env.MCP_OAUTH_CLIENT_ID,
+        hasOauthClientSecret: !!process.env.MCP_OAUTH_CLIENT_SECRET,
+        oauthRedirectUris: (process.env.MCP_OAUTH_REDIRECT_URIS ?? '')
+          .split(',')
+          .map((uri) => uri.trim())
+          .filter((uri) => uri.length > 0),
+      });
+    });
+
     const authToken = process.env.MCP_AUTH_TOKEN;
     const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
       if (!authToken) {
