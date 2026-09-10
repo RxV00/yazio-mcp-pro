@@ -11,4 +11,4 @@ RUN npm run build
 
 EXPOSE 8080
 
-CMD ["npx", "mcp-proxy", "--port", "8080", "--", "npm", "start"]
+CMD ["node", "dist/index.js"]
