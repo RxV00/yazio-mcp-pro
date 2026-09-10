@@ -862,14 +862,18 @@ Example:
     const publicUrl = process.env.MCP_PUBLIC_URL;
     const oauthClientId = process.env.MCP_OAUTH_CLIENT_ID;
     const oauthClientSecret = process.env.MCP_OAUTH_CLIENT_SECRET;
+    const oauthRedirectUris = (process.env.MCP_OAUTH_REDIRECT_URIS ?? '')
+      .split(',')
+      .map((uri) => uri.trim())
+      .filter((uri) => uri.length > 0);
 
-    if (publicUrl && oauthClientId && oauthClientSecret && authToken) {
+    if (publicUrl && oauthClientId && oauthClientSecret && authToken && oauthRedirectUris.length > 0) {
       const issuerUrl = new URL(publicUrl);
       const resourceServerUrl = new URL('/mcp', issuerUrl);
       const oauthClient: OAuthClientInformationFull = {
         client_id: oauthClientId,
         client_secret: oauthClientSecret,
-        redirect_uris: ['https://gemini.google.com/oauth-redirect'],
+        redirect_uris: oauthRedirectUris,
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         token_endpoint_auth_method: 'client_secret_post',
@@ -891,7 +895,7 @@ Example:
 
       console.log(`OAuth enabled for /mcp (authorization server metadata at ${new URL('/.well-known/oauth-authorization-server', issuerUrl).href})`);
     } else {
-      console.log('OAuth not configured (set MCP_PUBLIC_URL, MCP_OAUTH_CLIENT_ID, MCP_OAUTH_CLIENT_SECRET to enable it) - /mcp uses static bearer token auth only.');
+      console.log('OAuth not configured (set MCP_PUBLIC_URL, MCP_OAUTH_CLIENT_ID, MCP_OAUTH_CLIENT_SECRET, MCP_OAUTH_REDIRECT_URIS to enable it) - /mcp uses static bearer token auth only.');
     }
 
     // Streamable HTTP transport (current MCP spec) - single endpoint, GET/POST/DELETE
