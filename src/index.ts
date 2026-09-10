@@ -823,6 +823,11 @@ Example:
   async run(): Promise<void> {
     const app = express();
 
+    // Cloud Run terminates TLS and proxies requests through a single Google Frontend hop,
+    // which sets X-Forwarded-For; trust it so express-rate-limit (used by the OAuth routes)
+    // can identify clients correctly instead of logging a misconfiguration warning.
+    app.set('trust proxy', 1);
+
     app.use(express.json());
 
     app.get('/', (_req, res) => {
