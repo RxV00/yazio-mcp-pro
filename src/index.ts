@@ -65,7 +65,7 @@ class YazioMcpServer {
     if (!username || !password) {
       console.error('❌ YAZIO_USERNAME and YAZIO_PASSWORD environment variables are required');
       console.error('💡 Please set these environment variables with your Yazio account credentials');
-      process.exit(1);
+      return;
     }
 
     try {
@@ -80,9 +80,9 @@ class YazioMcpServer {
       console.error('✅ Successfully authenticated with Yazio using environment variables');
       this.extendWaterIntakeSupport(this.yazioClient);
     } catch (error) {
+      this.yazioClient = null;
       console.error('❌ Failed to authenticate with Yazio:', (error as Error).message);
       console.error('💡 Please check your YAZIO_USERNAME and YAZIO_PASSWORD environment variables');
-      process.exit(1);
     }
   }
 

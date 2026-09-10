@@ -25,7 +25,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc --emitDeclarationOnly && esbuild src/index.ts --bundle --platform=node --format=esm --packages=bundle --outfile=dist/index.js",
+    "build": "rm -rf dist && tsc --emitDeclarationOnly && esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/index.js",
     "pack:mcpb": "node scripts/pack-mcpb.cjs",
     "build:mcpb": "npm run build && npm run pack:mcpb",
     "build:mcpb:unpacked": "npm run build && node scripts/pack-mcpb.cjs --unpacked",
@@ -51,12 +51,14 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.0",
     "express": "^5.2.1",
-    "mcp-proxy": "^6.7.16"
+    "uuid": "^13.0.0",
+    "yazio": "^1.0.0",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^2.1.2",
-    "@modelcontextprotocol/sdk": "^1.25.0",
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.44.1",
@@ -66,9 +68,6 @@
     "globals": "^16.4.0",
     "prettier": "^3.6.2",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0",
-    "uuid": "^13.0.0",
-    "yazio": "^1.0.0",
-    "zod": "^4.2.1"
+    "typescript": "^5.0.0"
   }
 }
