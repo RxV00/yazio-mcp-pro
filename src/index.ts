@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { createRequire } from 'node:module';
+import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { Yazio } from 'yazio';
 import { v4 as uuidv4 } from "uuid";
 
@@ -803,9 +804,33 @@ Example:
 
 
   async run(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Yazio MCP server running on stdio');
+    const app = express();
+    let transport: SSEServerTransport | undefined;
+
+    app.use(express.json());
+
+    app.get('/', (_req, res) => {
+      res.send('YAZIO MCP Server is running.');
+    });
+
+    app.get('/sse', async (_req, res) => {
+      transport = new SSEServerTransport('/messages', res);
+      await this.server.connect(transport);
+    });
+
+    app.post('/messages', async (req, res) => {
+      if (!transport) {
+        res.status(400).send('SSE session not established yet.');
+        return;
+      }
+
+      await transport.handlePostMessage(req, res);
+    });
+
+    const port = Number(process.env.PORT) || 8080;
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`YAZIO MCP SSE Server listening on port ${port}`);
+    });
   }
 }
 

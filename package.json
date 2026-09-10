@@ -51,11 +51,13 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "express": "^5.2.1",
     "mcp-proxy": "^6.7.16"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^2.1.2",
     "@modelcontextprotocol/sdk": "^1.25.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.44.1",
     "@typescript-eslint/parser": "^8.44.1",
