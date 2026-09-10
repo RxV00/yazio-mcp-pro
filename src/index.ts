@@ -7,8 +7,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/sdk/server/auth/router.js';
+import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { Yazio } from 'yazio';
 import { v4 as uuidv4 } from "uuid";
+import { StaticClientOAuthProvider } from './oauth.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
@@ -846,8 +850,47 @@ Example:
       next();
     };
 
+    // Optional OAuth 2.1 support for clients (e.g. Gemini Spark) that only offer a
+    // "Client ID / Client Secret" flow rather than a raw bearer token field.
+    let mcpAuthMiddleware: express.RequestHandler = requireAuth;
+
+    const publicUrl = process.env.MCP_PUBLIC_URL;
+    const oauthClientId = process.env.MCP_OAUTH_CLIENT_ID;
+    const oauthClientSecret = process.env.MCP_OAUTH_CLIENT_SECRET;
+
+    if (publicUrl && oauthClientId && oauthClientSecret && authToken) {
+      const issuerUrl = new URL(publicUrl);
+      const resourceServerUrl = new URL('/mcp', issuerUrl);
+      const oauthClient: OAuthClientInformationFull = {
+        client_id: oauthClientId,
+        client_secret: oauthClientSecret,
+        redirect_uris: ['https://gemini.google.com/oauth-redirect'],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_post',
+      };
+      const oauthProvider = new StaticClientOAuthProvider(oauthClient, authToken, authToken);
+
+      app.use(
+        mcpAuthRouter({
+          provider: oauthProvider,
+          issuerUrl,
+          resourceServerUrl,
+        })
+      );
+
+      mcpAuthMiddleware = requireBearerAuth({
+        verifier: oauthProvider,
+        resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resourceServerUrl),
+      });
+
+      console.log(`OAuth enabled for /mcp (authorization server metadata at ${new URL('/.well-known/oauth-authorization-server', issuerUrl).href})`);
+    } else {
+      console.log('OAuth not configured (set MCP_PUBLIC_URL, MCP_OAUTH_CLIENT_ID, MCP_OAUTH_CLIENT_SECRET to enable it) - /mcp uses static bearer token auth only.');
+    }
+
     // Streamable HTTP transport (current MCP spec) - single endpoint, GET/POST/DELETE
-    app.all('/mcp', requireAuth, async (req, res) => {
+    app.all('/mcp', mcpAuthMiddleware, async (req, res) => {
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         let transport: StreamableHTTPServerTransport;
