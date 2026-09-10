@@ -825,8 +825,29 @@ Example:
       res.send('YAZIO MCP Server is running.');
     });
 
+    const authToken = process.env.MCP_AUTH_TOKEN;
+    const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
+      if (!authToken) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Server misconfigured: MCP_AUTH_TOKEN is not set' },
+          id: null,
+        });
+        return;
+      }
+      if (req.headers.authorization !== `Bearer ${authToken}`) {
+        res.status(401).json({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Unauthorized' },
+          id: null,
+        });
+        return;
+      }
+      next();
+    };
+
     // Streamable HTTP transport (current MCP spec) - single endpoint, GET/POST/DELETE
-    app.all('/mcp', async (req, res) => {
+    app.all('/mcp', requireAuth, async (req, res) => {
       try {
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         let transport: StreamableHTTPServerTransport;
@@ -877,7 +898,7 @@ Example:
     });
 
     // Deprecated HTTP+SSE transport - kept for older clients
-    app.get('/sse', async (_req, res) => {
+    app.get('/sse', requireAuth, async (_req, res) => {
       const transport = new SSEServerTransport('/messages', res);
       this.transports[transport.sessionId] = transport;
       res.on('close', () => {
@@ -886,7 +907,7 @@ Example:
       await this.createMcpServer().connect(transport);
     });
 
-    app.post('/messages', async (req, res) => {
+    app.post('/messages', requireAuth, async (req, res) => {
       const sessionId = req.query.sessionId as string | undefined;
       const transport = sessionId ? this.transports[sessionId] : undefined;
 
