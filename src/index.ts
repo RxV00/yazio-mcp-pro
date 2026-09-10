@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { Yazio } from 'yazio';
 import { v4 as uuidv4 } from "uuid";
 
@@ -42,20 +45,27 @@ import type {
   YazioAddWaterIntakeOptions
 } from './types.js';
 
+type McpTransport = SSEServerTransport | StreamableHTTPServerTransport;
+
 class YazioMcpServer {
-  private server: McpServer;
   private yazioClient: Yazio | null = null;
+  private readonly transports: Record<string, McpTransport> = {};
 
   constructor() {
-    this.server = new McpServer({
+    this.setupErrorHandling();
+    this.initializeClient();
+  }
+
+  private createMcpServer(): McpServer {
+    const server = new McpServer({
       name: 'yazio-mcp',
       version,
     });
 
-    this.setupToolHandlers();
-    this.setupPromptHandlers();
-    this.setupErrorHandling();
-    this.initializeClient();
+    this.setupToolHandlers(server);
+    this.setupPromptHandlers(server);
+
+    return server;
   }
 
   private async initializeClient(): Promise<void> {
@@ -116,13 +126,16 @@ class YazioMcpServer {
 
   private setupErrorHandling(): void {
     process.on('SIGINT', async () => {
-      await this.server.close();
+      for (const sessionId of Object.keys(this.transports)) {
+        await this.transports[sessionId].close();
+        delete this.transports[sessionId];
+      }
       process.exit(0);
     });
   }
 
-  private setupToolHandlers(): void {
-    this.server.registerTool(
+  private setupToolHandlers(server: McpServer): void {
+    server.registerTool(
       'get_user',
       {
         description: 'Get Yazio user profile information',
@@ -137,7 +150,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_consumed_items',
       {
         description: 'Get food entries for a specific date',
@@ -152,7 +165,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_dietary_preferences',
       {
         description: 'Get user dietary preferences and restrictions',
@@ -167,7 +180,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_exercises',
       {
         description: 'Get user exercise data for a date or date range',
@@ -182,7 +195,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_goals',
       {
         description: 'Get user nutrition and fitness goals',
@@ -197,7 +210,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_settings',
       {
         description: 'Get user settings and preferences',
@@ -212,7 +225,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_suggested_products',
       {
         description: 'Get product suggestions for the user',
@@ -228,7 +241,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_water_intake',
       {
         description: 'Get water intake data for a specific date',
@@ -243,7 +256,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_weight',
       {
         description: 'Get user weight data',
@@ -258,7 +271,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_user_daily_summary',
       {
         description: 'Get daily nutrition summary for a specific date',
@@ -273,7 +286,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'search_products',
       {
         description: 'Search for food products in Yazio database. You can optionally specify user\'s sex, country and locale of the products to search for.',
@@ -290,7 +303,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'get_product',
       {
         description: 'Get detailed information about a specific product by ID',
@@ -306,7 +319,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'add_user_consumed_item',
       {
         description: 'Add a food item to user consumption log',
@@ -321,7 +334,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'remove_user_consumed_item',
       {
         description: 'Remove a food item from user consumption log',
@@ -337,7 +350,7 @@ class YazioMcpServer {
       }
     );
 
-    this.server.registerTool(
+    server.registerTool(
       'add_user_water_intake',
       {
         description: 'Log a water intake entry. Requires date (YYYY-MM-DD HH:mm:ss format) and cumulative water_intake in milliliters (ml). Always get the latest water intake first and add the new amount to calculate the cumulative value.',
@@ -353,8 +366,8 @@ class YazioMcpServer {
     );
   }
 
-  private setupPromptHandlers(): void {
-    this.server.registerPrompt(
+  private setupPromptHandlers(server: McpServer): void {
+    server.registerPrompt(
       'add_food_item',
       {
         title: 'Add Food Item to Log',
@@ -406,7 +419,7 @@ Example:
       }
     );
 
-    this.server.registerPrompt(
+    server.registerPrompt(
       'remove_food_item',
       {
         title: 'Remove Food Item from Log',
@@ -446,7 +459,7 @@ Example:
       }
     );
 
-    this.server.registerPrompt(
+    server.registerPrompt(
       'add_water_intake',
       {
         title: 'Add Water Intake to Log',
@@ -805,7 +818,6 @@ Example:
 
   async run(): Promise<void> {
     const app = express();
-    let transport: SSEServerTransport | undefined;
 
     app.use(express.json());
 
@@ -813,23 +825,82 @@ Example:
       res.send('YAZIO MCP Server is running.');
     });
 
+    // Streamable HTTP transport (current MCP spec) - single endpoint, GET/POST/DELETE
+    app.all('/mcp', async (req, res) => {
+      try {
+        const sessionId = req.headers['mcp-session-id'] as string | undefined;
+        let transport: StreamableHTTPServerTransport;
+
+        if (sessionId && this.transports[sessionId] instanceof StreamableHTTPServerTransport) {
+          transport = this.transports[sessionId] as StreamableHTTPServerTransport;
+        } else if (sessionId && this.transports[sessionId]) {
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Bad Request: Session exists but uses a different transport protocol' },
+            id: null,
+          });
+          return;
+        } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+          transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+            onsessioninitialized: (newSessionId) => {
+              this.transports[newSessionId] = transport;
+            },
+          });
+          transport.onclose = () => {
+            const sid = transport.sessionId;
+            if (sid) {
+              delete this.transports[sid];
+            }
+          };
+          await this.createMcpServer().connect(transport);
+        } else {
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+            id: null,
+          });
+          return;
+        }
+
+        await transport.handleRequest(req, res, req.body);
+      } catch (error) {
+        console.error('Error handling MCP request:', error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: { code: -32603, message: 'Internal server error' },
+            id: null,
+          });
+        }
+      }
+    });
+
+    // Deprecated HTTP+SSE transport - kept for older clients
     app.get('/sse', async (_req, res) => {
-      transport = new SSEServerTransport('/messages', res);
-      await this.server.connect(transport);
+      const transport = new SSEServerTransport('/messages', res);
+      this.transports[transport.sessionId] = transport;
+      res.on('close', () => {
+        delete this.transports[transport.sessionId];
+      });
+      await this.createMcpServer().connect(transport);
     });
 
     app.post('/messages', async (req, res) => {
-      if (!transport) {
-        res.status(400).send('SSE session not established yet.');
+      const sessionId = req.query.sessionId as string | undefined;
+      const transport = sessionId ? this.transports[sessionId] : undefined;
+
+      if (!transport || !(transport instanceof SSEServerTransport)) {
+        res.status(400).send('No SSE session found for sessionId.');
         return;
       }
 
-      await transport.handlePostMessage(req, res);
+      await transport.handlePostMessage(req, res, req.body);
     });
 
     const port = Number(process.env.PORT) || 8080;
     app.listen(port, '0.0.0.0', () => {
-      console.log(`YAZIO MCP SSE Server listening on port ${port}`);
+      console.log(`YAZIO MCP Server listening on port ${port} (Streamable HTTP: /mcp, SSE: /sse)`);
     });
   }
 }
